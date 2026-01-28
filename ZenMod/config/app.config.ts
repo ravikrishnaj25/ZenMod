@@ -33,13 +33,9 @@ export const appConfig = {
     // Available models
     availableModels: [
       'moonshotai/kimi-k2-instruct-0905',
-      'openai/gpt-5',
+      
       'moonshotai/kimi-k2-instruct',
-      'anthropic/claude-sonnet-4-20250514',
-      'groq/llama-3.3-70b-versatile',
-      'groq/llama-3.1-8b-instant',
-      'deepseek/deepseek-chat',
-      'deepseek/deepseek-reasoner'
+      
     ],
 
     // Model display names

@@ -2870,8 +2870,8 @@ Focus on the key sections and content, making it clean and modern.`;
                 <div className="flex flex-col items-center gap-6">
                   {/* Buttons visible before interaction */}
                   <div className={`flex items-center gap-4 transition-all duration-300 ${homeUrlInput ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100 h-auto'}`}>
-                    
-                    
+
+
                   </div>
                 </div>
 
@@ -3064,26 +3064,29 @@ Focus on the key sections and content, making it clean and modern.`;
         <div className="flex items-center gap-2">
           <ThemeToggle />
           {/* Model Selector - Left side */}
-          <select
-            value={aiModel}
-            onChange={(e) => {
-              const newModel = e.target.value;
-              setAiModel(newModel);
-              const params = new URLSearchParams(searchParams);
-              params.set('model', newModel);
-              if (sandboxData?.sandboxId) {
-                params.set('sandbox', sandboxData.sandboxId);
-              }
-              router.push(`/?${params.toString()}`);
-            }}
-            className="px-3 py-1.5 text-sm bg-background border border-border rounded-[10px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-          >
-            {appConfig.ai.availableModels.map(model => (
-              <option key={model} value={model}>
-                {(appConfig.ai.modelDisplayNames as any)[model] || model}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <select
+              value={aiModel}
+              onChange={(e) => {
+                const newModel = e.target.value;
+                setAiModel(newModel);
+                const params = new URLSearchParams(searchParams);
+                params.set('model', newModel);
+                if (sandboxData?.sandboxId) {
+                  params.set('sandbox', sandboxData.sandboxId);
+                }
+                router.push(`/?${params.toString()}`);
+              }}
+              className="appearance-none h-8 pl-3 pr-8 py-1 text-sm bg-[#101010] text-white border border-white/10 rounded-[10px] focus:outline-none focus:ring-2 focus:ring-white/20 transition-all cursor-pointer hover:bg-[#101010]/90"
+            >
+              {appConfig.ai.availableModels.map(model => (
+                <option key={model} value={model} className="bg-[#101010] text-white">
+                  {(appConfig.ai.modelDisplayNames as any)[model] || model}
+                </option>
+              ))}
+            </select>
+            <FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50 pointer-events-none" />
+          </div>
           <Button
             variant="code"
             onClick={() => createSandbox()}
