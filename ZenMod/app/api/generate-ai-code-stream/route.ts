@@ -18,7 +18,7 @@ import { appConfig } from '@/config/app.config';
 console.log('[generate-ai-code-stream] GROQ_API_KEY loaded:', process.env.GROQ_API_KEY ? `Yes (${process.env.GROQ_API_KEY.substring(0, 8)}...)` : 'No');
 
 const groq = createGroq({
-  apiKey: "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",
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 const anthropic = createAnthropic({
@@ -100,37 +100,70 @@ export async function POST(request: NextRequest) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
+    // Allow development mode to bypass auth for testing
+    const isDevelopment = process.env.NODE_ENV === 'development' || process.env.ALLOW_UNAUTHENTICATED === 'true';
+    
     if (authError || !user) {
-      console.error('[generate-ai-code-stream] Auth failed:', authError?.message || 'No user found');
-      // Log all cookies for debugging (sensitive info removed)
-      // const cookieStore = await cookies();
-      // console.log('[generate-ai-code-stream] Cookies names:', cookieStore.getAll().map(c => c.name));
-      return NextResponse.json({ error: "Unauthorized", details: authError?.message }, { status: 401 });
+      if (!isDevelopment) {
+        console.error('[generate-ai-code-stream] Auth failed:', authError?.message || 'No user found');
+        return NextResponse.json({ error: "Unauthorized", details: authError?.message }, { status: 401 });
+      }
+      console.warn('[generate-ai-code-stream] Auth failed but development mode enabled, continuing without auth');
+    } else {
+      console.log('[generate-ai-code-stream] User authenticated:', user.id);
     }
 
-    // Fetch conversation history from the database
-    let { data: conversation, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+    // Use development user ID if not authenticated in dev mode (valid UUID format)
+    const userId = user?.id || (isDevelopment ? '550e8400-e29b-41d4-a716-446655440000' : null);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    if (error || !conversation) {
-      // Create a new conversation if one doesn't exist
-      const { data: newConversation, error: newConversationError } = await supabase
+    // Fetch conversation history from the database with error handling
+    let conversation = null;
+    let messages: ConversationMessage[] = [];
+    
+    try {
+      const { data: existingConversation, error } = await supabase
         .from('conversations')
-        .insert({ user_id: user.id, messages: [] })
-        .select()
+        .select('*')
+        .eq('user_id', userId)
         .single();
 
-      if (newConversationError) {
-        throw newConversationError;
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows" error
+        throw error;
       }
-      conversation = newConversation;
+
+      if (existingConversation) {
+        conversation = existingConversation;
+        messages = existingConversation.messages || [];
+      } else if (!isDevelopment) {
+        // Create a new conversation if one doesn't exist (only in production)
+        const { data: newConversation, error: newConversationError } = await supabase
+          .from('conversations')
+          .insert({ user_id: userId, messages: [] })
+          .select()
+          .single();
+
+        if (newConversationError) {
+          throw newConversationError;
+        }
+        conversation = newConversation;
+        messages = [];
+      } else {
+        // In development mode, just use empty messages array
+        console.log('[generate-ai-code-stream] No conversation found, using in-memory state for development');
+        messages = [];
+      }
+    } catch (dbError) {
+      if (isDevelopment) {
+        console.warn('[generate-ai-code-stream] Database error but development mode enabled, continuing with in-memory state:', dbError);
+        messages = [];
+      } else {
+        throw dbError;
+      }
     }
 
-    const messages = conversation.messages || [];
-    // Add user message to conversation history
     const userMessage: ConversationMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
@@ -1380,10 +1413,21 @@ REMEMBER: It's better to generate fewer COMPLETE files than many INCOMPLETE file
         };
         messages.push(aiMessage);
 
-        await supabase
-          .from('conversations')
-          .update({ messages })
-          .eq('id', conversation.id);
+        // Update conversation in database (with error handling for dev mode)
+        try {
+          if (conversation?.id) {
+            await supabase
+              .from('conversations')
+              .update({ messages })
+              .eq('id', conversation.id);
+          }
+        } catch (updateError) {
+          if (isDevelopment) {
+            console.warn('[generate-ai-code-stream] Failed to update conversation in DB, continuing:', updateError);
+          } else {
+            throw updateError;
+          }
+        }
 
         // Send any remaining conversational text
         if (conversationalBuffer.trim()) {

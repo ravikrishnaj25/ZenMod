@@ -31,7 +31,13 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    await supabase.auth.getUser()
+    try {
+        await supabase.auth.getUser()
+    } catch (error) {
+        // Log the error but don't fail the request
+        // This allows the app to continue even if Supabase is unreachable
+        console.warn('[middleware] Supabase auth check failed:', error instanceof Error ? error.message : 'Unknown error')
+    }
 
     return response
 }

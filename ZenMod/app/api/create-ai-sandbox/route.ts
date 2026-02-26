@@ -305,6 +305,29 @@ print('Waiting for server to be ready...')
     // Wait for Vite to be fully ready
     await new Promise(resolve => setTimeout(resolve, appConfig.e2b.viteStartupDelay));
     
+    // Verify Vite server is responding
+    let serverReady = false;
+    console.log('[create-ai-sandbox] Verifying Vite server is responding...');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const response = await fetch(`https://${host}`, {
+          timeout: 5000
+        });
+        if (response.ok || response.status === 404) {
+          serverReady = true;
+          console.log('[create-ai-sandbox] ✓ Vite server is responding');
+          break;
+        }
+      } catch (error) {
+        console.warn(`[create-ai-sandbox] Health check attempt ${attempt + 1}/5 failed, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    if (!serverReady) {
+      console.warn('[create-ai-sandbox] Vite server may not be responding, but continuing anyway');
+    }
+    
     // Force Tailwind CSS to rebuild by touching the CSS file
     await sandbox.runCode(`
 import os
