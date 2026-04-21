@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
   try {
     console.log('[create-ai-sandbox] Creating base sandbox...');
-    
+
     // Kill existing sandbox if any
     if (global.activeSandbox) {
       console.log('[create-ai-sandbox] Killing existing sandbox...');
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       }
       global.activeSandbox = null;
     }
-    
+
     // Clear existing files tracking
     if (global.existingFiles) {
       global.existingFiles.clear();
@@ -38,14 +38,14 @@ export async function POST(request: Request) {
 
     // Create base sandbox - we'll set up Vite ourselves for full control
     console.log(`[create-ai-sandbox] Creating base E2B sandbox with ${appConfig.e2b.timeoutMinutes} minute timeout...`);
-    sandbox = await Sandbox.create({ 
+    sandbox = await Sandbox.create({
       apiKey: process.env.E2B_API_KEY,
       timeoutMs: appConfig.e2b.timeoutMs
     });
-    
+
     const sandboxId = (sandbox as any).sandboxId || Date.now().toString();
     const host = (sandbox as any).getHost(appConfig.e2b.vitePort);
-    
+
     console.log(`[create-ai-sandbox] Sandbox created: ${sandboxId}`);
     console.log(`[create-ai-sandbox] Sandbox host: ${host}`);
 
@@ -97,7 +97,8 @@ package_json = {
     },
     "dependencies": {
         "react": "^18.2.0",
-        "react-dom": "^18.2.0"
+        "react-dom": "^18.2.0",
+        "react-router-dom": "^6.20.0"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.0.0",
@@ -182,12 +183,15 @@ print('✓ index.html')
 # Main.jsx
 main_jsx = """import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </React.StrictMode>,
 )"""
 
@@ -252,7 +256,7 @@ print('\\nAll files created successfully!')
       // Execute the setup script
       await sandbox.runCode(setupScript);
     }
-    
+
     // Install dependencies
     console.log('[create-ai-sandbox] Installing dependencies...');
     await sandbox.runCode(`
@@ -273,7 +277,7 @@ else:
     print(f'⚠ Warning: npm install had issues: {result.stderr}')
     # Continue anyway as it might still work
     `);
-    
+
     // Start Vite dev server
     console.log('[create-ai-sandbox] Starting Vite dev server...');
     await sandbox.runCode(`
@@ -301,10 +305,10 @@ process = subprocess.Popen(
 print(f'✓ Vite dev server started with PID: {process.pid}')
 print('Waiting for server to be ready...')
     `);
-    
+
     // Wait for Vite to be fully ready
     await new Promise(resolve => setTimeout(resolve, appConfig.e2b.viteStartupDelay));
-    
+
     // Force Tailwind CSS to rebuild by touching the CSS file
     await sandbox.runCode(`
 import os
@@ -327,13 +331,13 @@ print('✓ Tailwind CSS should be loaded')
       sandboxId,
       url: `https://${host}`
     };
-    
+
     // Set extended timeout on the sandbox instance if method available
     if (typeof sandbox.setTimeout === 'function') {
       sandbox.setTimeout(appConfig.e2b.timeoutMs);
       console.log(`[create-ai-sandbox] Set sandbox timeout to ${appConfig.e2b.timeoutMinutes} minutes`);
     }
-    
+
     // Initialize sandbox state
     global.sandboxState = {
       fileCache: {
@@ -347,7 +351,7 @@ print('✓ Tailwind CSS should be loaded')
         url: `https://${host}`
       }
     };
-    
+
     // Track initial files
     global.existingFiles.add('src/App.jsx');
     global.existingFiles.add('src/main.jsx');
@@ -357,9 +361,9 @@ print('✓ Tailwind CSS should be loaded')
     global.existingFiles.add('vite.config.js');
     global.existingFiles.add('tailwind.config.js');
     global.existingFiles.add('postcss.config.js');
-    
+
     console.log('[create-ai-sandbox] Sandbox ready at:', `https://${host}`);
-    
+
     return NextResponse.json({
       success: true,
       sandboxId,
@@ -369,7 +373,7 @@ print('✓ Tailwind CSS should be loaded')
 
   } catch (error) {
     console.error('[create-ai-sandbox] Error:', error);
-    
+
     // Clean up on error
     if (sandbox) {
       try {
@@ -378,9 +382,9 @@ print('✓ Tailwind CSS should be loaded')
         console.error('Failed to close sandbox on error:', e);
       }
     }
-    
+
     return NextResponse.json(
-      { 
+      {
         error: error instanceof Error ? error.message : 'Failed to create sandbox',
         details: error instanceof Error ? error.stack : undefined
       },

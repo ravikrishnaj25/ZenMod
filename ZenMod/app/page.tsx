@@ -204,16 +204,7 @@ export default function AISandboxPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showHomeScreen]);
 
-  // Start capturing screenshot if URL is provided on mount (from home screen)
-  useEffect(() => {
-    if (!showHomeScreen && homeUrlInput && !urlScreenshot && !isCapturingScreenshot) {
-      let screenshotUrl = homeUrlInput.trim();
-      if (!screenshotUrl.match(/^https?:\/\//i)) {
-        screenshotUrl = 'https://' + screenshotUrl;
-      }
-      captureUrlScreenshot(screenshotUrl);
-    }
-  }, [showHomeScreen, homeUrlInput]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
 
   useEffect(() => {
@@ -2395,25 +2386,14 @@ Focus on the key sections and content, making it clean and modern while preservi
 
     // Clear messages and immediately show the cloning message
     setChatMessages([]);
-    let displayUrl = homeUrlInput.trim();
-    if (!displayUrl.match(/^https?:\/\//i)) {
-      displayUrl = 'https://' + displayUrl;
-    }
-    // Remove protocol for cleaner display
-    const cleanUrl = displayUrl.replace(/^https?:\/\//i, '');
-    addChatMessage(`Starting to clone ${cleanUrl}...`, 'system');
+    let userPrompt = homeUrlInput.trim();
+    addChatMessage(`Starting generation for: ${userPrompt}...`, 'system');
 
-    // Start creating sandbox and capturing screenshot immediately in parallel
+    // Start creating sandbox immediately
     const sandboxPromise = !sandboxData ? createSandbox(true) : Promise.resolve();
 
-    // Only capture screenshot if we don't already have a sandbox (first generation)
-    // After sandbox is set up, skip the screenshot phase for faster generation
-    if (!sandboxData) {
-      captureUrlScreenshot(displayUrl);
-    }
-
     // Set loading stage immediately before hiding home screen
-    setLoadingStage('gathering');
+    setLoadingStage('planning');
     // Also ensure we're on preview tab to show the loading overlay
     setActiveTab('preview');
 
@@ -2424,66 +2404,31 @@ Focus on the key sections and content, making it clean and modern while preservi
       // Wait for sandbox to be ready (if it's still creating)
       await sandboxPromise;
 
-      // Now start the clone process which will stream the generation
+      // Now start the generation process which will stream the code
       setUrlInput(homeUrlInput);
       setUrlOverlayVisible(false); // Make sure overlay is closed
-      setUrlStatus(['Scraping website content...']);
+      setUrlStatus(['Generating React app...']);
 
       try {
-        // Scrape the website
-        let url = homeUrlInput.trim();
-        if (!url.match(/^https?:\/\//i)) {
-          url = 'https://' + url;
-        }
-
-        // Screenshot is already being captured in parallel above
-
-        const scrapeResponse = await fetch('/api/scrape-url-enhanced', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url })
-        });
-
-        if (!scrapeResponse.ok) {
-          throw new Error('Failed to scrape website');
-        }
-
-        const scrapeData = await scrapeResponse.json();
-
-        if (!scrapeData.success) {
-          throw new Error(scrapeData.error || 'Failed to scrape website');
-        }
-
-        setUrlStatus(['Website scraped successfully!', 'Generating React app...']);
-
         // Clear preparing design state and switch to generation tab
         setIsPreparingDesign(false);
         setUrlScreenshot(null); // Clear screenshot when starting generation
         setTargetUrl(''); // Clear target URL
 
-        // Update loading stage to planning
-        setLoadingStage('planning');
+        // Update loading stage to generating
+        setLoadingStage('generating');
+        setActiveTab('generation');
 
-        // Brief pause before switching to generation tab
-        setTimeout(() => {
-          setLoadingStage('generating');
-          setActiveTab('generation');
-        }, 1500);
-
-        // Store scraped data in conversation context
+        // Store context
         setConversationContext(prev => ({
           ...prev,
-          scrapedWebsites: [...prev.scrapedWebsites, {
-            url: url,
-            content: scrapeData,
-            timestamp: new Date()
-          }],
-          currentProject: `${url} Clone`
+          currentProject: `Generation from prompt`
         }));
 
-        const prompt = `I want to recreate the ${url} website as a complete React application based on the scraped content below.
+        const prompt = `I want to create a complete React application based on the user's request below.
 
-${JSON.stringify(scrapeData, null, 2)}
+USER REQUEST:
+${userPrompt}
 
 ${homeContextInput ? `ADDITIONAL CONTEXT/REQUIREMENTS FROM USER:
 ${homeContextInput}
@@ -2492,10 +2437,9 @@ Please incorporate these requirements into the design and implementation.` : ''}
 
 IMPORTANT INSTRUCTIONS:
 - Create a COMPLETE, working React application
-- Implement ALL sections and features from the original site
+- Implement ALL requested sections and features
 - Use Tailwind CSS for all styling (no custom CSS files)
 - Make it responsive and modern
-- Ensure all text content matches the original
 - Create proper component structure
 - Make sure the app actually renders visible content
 - Create ALL components that you reference in imports
@@ -2715,11 +2659,9 @@ Focus on the key sections and content, making it clean and modern.`;
           await applyGeneratedCode(generatedCode, false);
 
           addChatMessage(
-            `Successfully recreated ${url} as a modern React app${homeContextInput ? ` with your requested context: "${homeContextInput}"` : ''}! The scraped content is now in my context, so you can ask me to modify specific sections or add features based on the original site.`,
+            `Successfully generated your React app! The code is now running in your sandbox.`,
             'ai',
             {
-              scrapedUrl: url,
-              scrapedContent: scrapeData,
               generatedCode: generatedCode
             }
           );
@@ -2870,8 +2812,8 @@ Focus on the key sections and content, making it clean and modern.`;
                 <div className="flex flex-col items-center gap-6">
                   {/* Buttons visible before interaction */}
                   <div className={`flex items-center gap-4 transition-all duration-300 ${homeUrlInput ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100 h-auto'}`}>
-                    
-                    
+
+
                   </div>
                 </div>
 
@@ -2885,9 +2827,8 @@ Focus on the key sections and content, making it clean and modern.`;
                       const value = e.target.value;
                       setHomeUrlInput(value);
 
-                      // Check if it's a valid domain
-                      const domainRegex = /^(https?:\/\/)?(([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})(\/?.*)?$/;
-                      if (domainRegex.test(value) && value.length > 5) {
+                      // Show style selector for both URLs and generic prompts
+                      if (value.trim().length > 0) {
                         // Small delay to make the animation feel smoother
                         setTimeout(() => setShowStyleSelector(true), 100);
                       } else {
@@ -2895,8 +2836,9 @@ Focus on the key sections and content, making it clean and modern.`;
                         setSelectedStyle(null);
                       }
                     }}
+                    onFocus={() => setShowStyleSelector(true)}
                     placeholder=" "
-                    aria-placeholder="https://zenmod.ai"
+                    aria-placeholder="https://zenmod.ai or 'Generate a...'"
                     className="h-[3.25rem] w-full resize-none focus-visible:outline-none focus-visible:ring-orange-500 focus-visible:ring-2 rounded-[18px] text-sm text-foreground px-4 pr-12 border-[.75px] border-border bg-background"
                     style={{
                       boxShadow: '0 0 0 1px #e3e1de66, 0 1px 2px #5f4a2e14, 0 4px 6px #5f4a2e0a, 0 40px 40px -24px #684b2514',
@@ -2906,11 +2848,11 @@ Focus on the key sections and content, making it clean and modern.`;
                   />
                   <div
                     aria-hidden="true"
-                    className={`absolute top-1/2 -translate-y-1/2 left-4 pointer-events-none text-sm text-opacity-50 text-start transition-opacity ${homeUrlInput ? 'opacity-0' : 'opacity-100'
+                    className={`absolute top-1/2 -translate-y-1/2 left-4 pointer-events-none text-sm text-opacity-50 text-start transition-opacity ${homeUrlInput ? 'opacity-0 hidden' : 'opacity-100'
                       }`}
                   >
                     <span className="text-[#605A57]/50" style={{ fontFamily: 'monospace' }}>
-                      https://zenmod.ai
+                      Ask ZenMod.AI to build
                     </span>
                   </div>
                   <button

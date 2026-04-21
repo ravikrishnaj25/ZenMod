@@ -184,13 +184,30 @@ function parseAIResponse(response: string): ParsedResponse {
   }
 
   // Also try to parse if the response contains raw JSX/JS code blocks
-  const codeBlockRegex = /```(?:jsx?|tsx?|javascript|typescript)?\n([\s\S]*?)```/g;
+  const codeBlockRegex = /```(?:jsx?|tsx?|javascript|typescript|css|html)?\n([\s\S]*?)```/g;
   while ((match = codeBlockRegex.exec(response)) !== null) {
+    const contextBefore = response.substring(Math.max(0, match.index - 200), match.index);
     const content = match[1].trim();
+
     // Try to detect the file name from comments or context
-    const fileNameMatch = content.match(/\/\/\s*(?:File:|Component:)\s*([^\n]+)/);
-    if (fileNameMatch) {
-      const fileName = fileNameMatch[1].trim();
+    let fileName = '';
+
+    const commentMatch = content.match(/\/\/\s*(?:File:|Component:)\s*([^\n]+)/);
+    const pathMatch = contextBefore.match(/(?:Create|File|Update|Modify|in)[*:\s]+([a-zA-Z0-9_.\-\/]+\.(?:jsx?|tsx?|css|json|html))/i);
+    const boldPathMatch = contextBefore.match(/\*\*([a-zA-Z0-9_.\-\/]+\.(?:jsx?|tsx?|css|json|html))\*\*/);
+    const altPathMatch = contextBefore.match(/`([a-zA-Z0-9_.\-\/]+\.(?:jsx?|tsx?|css|json|html))`[\s\S]*?$/i); // Backticks near end
+
+    if (commentMatch) {
+      fileName = commentMatch[1].trim();
+    } else if (pathMatch) {
+      fileName = pathMatch[1].trim();
+    } else if (boldPathMatch) {
+      fileName = boldPathMatch[1].trim();
+    } else if (altPathMatch) {
+      fileName = altPathMatch[1].trim();
+    }
+
+    if (fileName) {
       const filePath = fileName.includes('/') ? fileName : `src/components/${fileName}`;
 
       // Don't add duplicate files

@@ -23,9 +23,9 @@ export function ThemeToggle() {
             aria-label="Toggle theme"
         >
             {theme === 'dark' ? (
-                <LuSun className="w-5 h-5 text-amber-400" />
-            ) : (
                 <LuMoon className="w-5 h-5 text-indigo-600" />
+            ) : (
+                <LuSun className="w-5 h-5 text-amber-400" />
             )}
         </button>
     );

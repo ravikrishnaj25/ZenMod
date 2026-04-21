@@ -18,7 +18,7 @@ import { appConfig } from '@/config/app.config';
 console.log('[generate-ai-code-stream] GROQ_API_KEY loaded:', process.env.GROQ_API_KEY ? `Yes (${process.env.GROQ_API_KEY.substring(0, 8)}...)` : 'No');
 
 const groq = createGroq({
-  apiKey: "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",
+  apiKey: process.env.GROQ_API_KEY || '',
 });
 
 const anthropic = createAnthropic({
@@ -101,35 +101,35 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      console.error('[generate-ai-code-stream] Auth failed:', authError?.message || 'No user found');
-      // Log all cookies for debugging (sensitive info removed)
-      // const cookieStore = await cookies();
-      // console.log('[generate-ai-code-stream] Cookies names:', cookieStore.getAll().map(c => c.name));
-      return NextResponse.json({ error: "Unauthorized", details: authError?.message }, { status: 401 });
+      console.warn('[generate-ai-code-stream] Auth failed or no user found. Proceeding with anonymous local session.');
     }
 
-    // Fetch conversation history from the database
-    let { data: conversation, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
+    let messages: ConversationMessage[] = [];
 
-    if (error || !conversation) {
-      // Create a new conversation if one doesn't exist
-      const { data: newConversation, error: newConversationError } = await supabase
+    if (user) {
+      // Fetch conversation history from the database
+      let { data: conversation, error } = await supabase
         .from('conversations')
-        .insert({ user_id: user.id, messages: [] })
-        .select()
+        .select('*')
+        .eq('user_id', user.id)
         .single();
 
-      if (newConversationError) {
-        throw newConversationError;
+      if (error || !conversation) {
+        // Create a new conversation if one doesn't exist
+        const { data: newConversation, error: newConversationError } = await supabase
+          .from('conversations')
+          .insert({ user_id: user.id, messages: [] })
+          .select()
+          .single();
+
+        if (!newConversationError && newConversation) {
+          messages = newConversation.messages || [];
+        }
+      } else {
+        messages = conversation.messages || [];
       }
-      conversation = newConversation;
     }
 
-    const messages = conversation.messages || [];
     // Add user message to conversation history
     const userMessage: ConversationMessage = {
       id: `msg-${Date.now()}`,
@@ -786,6 +786,11 @@ REQUIRED COMPONENTS for website clones:
 - NEVER create vite.config.js - it's already configured in the template
 - NEVER create package.json - it's already configured in the template
 
+CRITICAL REACT ROUTER RULE:
+- If you use \`react-router-dom\` (like <Link>, <Route>, useNavigate), you MUST import \`BrowserRouter\` and wrap your entire app inside it within \`App.jsx\`!
+- For example: \`return <BrowserRouter><div className="...">...</div></BrowserRouter>;\`
+- Otherwise, the app WILL crash with a router context error.
+
 WHEN WORKING WITH SCRAPED CONTENT:
 - ALWAYS sanitize all text content before using in code
 - Convert ALL smart quotes to straight quotes
@@ -1375,10 +1380,12 @@ REMEMBER: It's better to generate fewer COMPLETE files than many INCOMPLETE file
         };
         messages.push(aiMessage);
 
-        await supabase
-          .from('conversations')
-          .update({ messages })
-          .eq('id', conversation.id);
+        if (user) {
+          await supabase
+            .from('conversations')
+            .update({ messages })
+            .eq('user_id', user.id);
+        }
 
         // Send any remaining conversational text
         if (conversationalBuffer.trim()) {
