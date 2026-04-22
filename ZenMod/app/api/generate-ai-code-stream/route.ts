@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs'; // Force Node.js runtime to resolve Supabase fetch issues in local dev
 import { createClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
 import { createGroq } from '@ai-sdk/groq';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
