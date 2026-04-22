@@ -14,7 +14,7 @@ export const createClient = async () => {
           console.log('[supabase-server] getAll cookies:', allCookies.map(c => c.name));
           return allCookies
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           console.log('[supabase-server] setAll cookies:', cookiesToSet.map(c => c.name));
           try {
             cookiesToSet.forEach(({ name, value, options }) =>

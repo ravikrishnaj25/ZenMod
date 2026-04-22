@@ -1,18 +1,27 @@
 import { Octokit } from "@octokit/rest";
 
+export interface RepoFile {
+  path: string;
+  content: string;
+}
+
 export async function getRepoContents(
   octokit: Octokit,
   owner: string,
   repo: string,
   path: string = ""
-) {
-  const { data: contents } = await octokit.repos.getContents({
+): Promise<RepoFile[]> {
+  const { data: contents } = await octokit.repos.getContent({
     owner,
     repo,
     path,
   });
 
-  const files = [];
+  if (!Array.isArray(contents)) {
+    return [];
+  }
+
+  const files: RepoFile[] = [];
   for (const item of contents) {
     if (item.type === "file") {
       const { data: file } = await octokit.git.getBlob({

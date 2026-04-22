@@ -1,6 +1,7 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { supabase } from "@/lib/supabase/client";
 import { AuthChangeEvent, Session } from '@supabase/supabase-js'
@@ -52,7 +53,7 @@ interface ChatMessage {
   };
 }
 
-export default function AISandboxPage() {
+function AISandboxPageContent() {
   const { addToast } = useToast();
   const [subscription, setSubscription] = useState<any | null>(null);
   const [dailyMessageCount, setDailyMessageCount] = useState(0);
@@ -1643,14 +1644,19 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                   // Add conversational text to chat only if it's not code
                   let text = data.text || '';
 
-                  // Remove package tags from the text
-                  text = text.replace(/<package>[^<]*<\/package>/g, '');
-                  text = text.replace(/<packages>[^<]*<\/packages>/g, '');
+                  // Aggressively filter out code-like content from conversational chunks
+                  const isCodeLike =
+                    text.includes('<file') ||
+                    text.includes('import ') ||
+                    text.includes('export ') ||
+                    text.includes('className=') ||
+                    text.includes('```') ||
+                    text.includes('const ') ||
+                    text.includes('function ') ||
+                    text.includes('type ') ||
+                    text.includes('interface ');
 
-                  // Filter out any XML tags and file content that slipped through
-                  if (!text.includes('<file') && !text.includes('import React') &&
-                    !text.includes('export default') && !text.includes('className=') &&
-                    text.trim().length > 0) {
+                  if (!isCodeLike && text.trim().length > 0) {
                     addChatMessage(text.trim(), 'ai');
                   }
                 } else if (data.type === 'stream' && data.raw) {
@@ -1860,16 +1866,27 @@ Tip: I automatically detect and install npm packages from your code imports (lik
         if (isEdit && generatedFiles.length > 0) {
           // For edits, show which file(s) were edited
           const editedFileNames = generatedFiles.map(f => f.split('/').pop()).join(', ');
+
+          // Strip any code blocks from the explanation before showing in chat
+          const cleanExplanation = explanation
+            ? explanation.replace(/```[\s\S]*?```/g, '').replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, '').trim()
+            : `Updated ${editedFileNames}`;
+
           addChatMessage(
-            explanation || `Updated ${editedFileNames}`,
+            cleanExplanation,
             'ai',
             {
               appliedFiles: [generatedFiles[0]] // Only show the first edited file
             }
           );
         } else {
+          // Strip any code blocks from the explanation before showing in chat
+          const cleanExplanation = explanation
+            ? explanation.replace(/```[\s\S]*?```/g, '').replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, '').trim()
+            : 'Code generated!';
+
           // For new generation, show all files
-          addChatMessage(explanation || 'Code generated!', 'ai', {
+          addChatMessage(cleanExplanation, 'ai', {
             appliedFiles: generatedFiles
           });
         }
@@ -2237,14 +2254,19 @@ Focus on the key sections and content, making it clean and modern while preservi
                   // Add conversational text to chat only if it's not code
                   let text = data.text || '';
 
-                  // Remove package tags from the text
-                  text = text.replace(/<package>[^<]*<\/package>/g, '');
-                  text = text.replace(/<packages>[^<]*<\/packages>/g, '');
+                  // Aggressively filter out code-like content from conversational chunks
+                  const isCodeLike =
+                    text.includes('<file') ||
+                    text.includes('import ') ||
+                    text.includes('export ') ||
+                    text.includes('className=') ||
+                    text.includes('```') ||
+                    text.includes('const ') ||
+                    text.includes('function ') ||
+                    text.includes('type ') ||
+                    text.includes('interface ');
 
-                  // Filter out any XML tags and file content that slipped through
-                  if (!text.includes('<file') && !text.includes('import React') &&
-                    !text.includes('export default') && !text.includes('className=') &&
-                    text.trim().length > 0) {
+                  if (!isCodeLike && text.trim().length > 0) {
                     addChatMessage(text.trim(), 'ai');
                   }
                 } else if (data.type === 'stream' && data.raw) {
@@ -2293,9 +2315,12 @@ Focus on the key sections and content, making it clean and modern while preservi
       if (generatedCode) {
         addChatMessage('AI recreation generated!', 'system');
 
-        // Add the explanation to chat if available
+        // Add the explanation to chat if available, stripping code blocks
         if (explanation && explanation.trim()) {
-          addChatMessage(explanation, 'ai');
+          const cleanExplanation = explanation.replace(/```[\s\S]*?```/g, '').replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, '').trim();
+          if (cleanExplanation) {
+            addChatMessage(cleanExplanation, 'ai');
+          }
         }
 
         setPromptInput(generatedCode);
@@ -3562,5 +3587,17 @@ Focus on the key sections and content, making it clean and modern.`;
         </div>
       )}
     </div>
+  );
+}
+
+export default function AISandboxPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <AISandboxPageContent />
+    </Suspense>
   );
 }

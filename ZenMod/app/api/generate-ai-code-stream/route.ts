@@ -1193,7 +1193,6 @@ CRITICAL: When files are provided in the context:
             {
               role: 'system',
               content: systemPrompt + `
-
 🚨 CRITICAL CODE GENERATION RULES - VIOLATION = FAILURE 🚨:
 1. NEVER truncate ANY code - ALWAYS write COMPLETE files
 2. NEVER use "..." anywhere in your code - this causes syntax errors
@@ -1201,6 +1200,8 @@ CRITICAL: When files are provided in the context:
 4. NEVER leave incomplete class names or attributes
 5. ALWAYS close ALL tags, quotes, brackets, and parentheses
 6. If you run out of space, prioritize completing the current file
+7. NEVER include code blocks (\`\`\`jsx ... \`\`\`) in your explanation or conversational text. All code MUST be inside <file> tags.
+8. Keep your <explanation> concise and focused on what was changed.
 
 CRITICAL STRING RULES TO PREVENT SYNTAX ERRORS:
 - NEVER write: className="px-8 py-4 bg-black text-white font-bold neobrut-border neobr...
