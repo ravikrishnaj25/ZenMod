@@ -32,26 +32,12 @@ export const appConfig = {
 
     // Available models
     availableModels: [
-      'moonshotai/kimi-k2-instruct-0905',
-      'openai/gpt-5',
-      'moonshotai/kimi-k2-instruct',
-      'anthropic/claude-sonnet-4-20250514',
-      'groq/llama-3.3-70b-versatile',
-      'groq/llama-3.1-8b-instant',
-      'deepseek/deepseek-chat',
-      'deepseek/deepseek-reasoner'
+      'groq/llama-3.3-70b-versatile'
     ],
 
     // Model display names
     modelDisplayNames: {
-      'openai/gpt-5': 'GPT-5',
-      'moonshotai/kimi-k2-instruct': 'Kimi K2 Instruct',
-      'moonshotai/kimi-k2-instruct-0905': 'Kimi K2 Instruct 0905 (Groq)',
-      'anthropic/claude-sonnet-4-20250514': 'Sonnet 4',
-      'groq/llama-3.3-70b-versatile': 'Llama 3.3 70B (Groq)',
-      'groq/llama-3.1-8b-instant': 'Llama 3.1 8B Fast (Groq)',
-      'deepseek/deepseek-chat': 'DeepSeek V3',
-      'deepseek/deepseek-reasoner': 'DeepSeek R1 (Reasoning)'
+      'groq/llama-3.3-70b-versatile': 'Llama 3.3 70B (Free Model for Preview)'
     },
 
     // Temperature settings for non-reasoning models

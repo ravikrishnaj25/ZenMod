@@ -31,6 +31,7 @@ import CodeApplicationProgress, { type CodeApplicationState } from '@/components
 import SubscriptionPlans from '@/components/SubscriptionPlans';
 import ImportFromGithubModal from '@/components/ImportFromGithubModal';
 import ExportToGithubModal from '@/components/ExportToGithubModal';
+import { useToast } from '@/components/Toast';
 
 interface SandboxData {
   sandboxId: string;
@@ -52,6 +53,7 @@ interface ChatMessage {
 }
 
 export default function AISandboxPage() {
+  const { addToast } = useToast();
   const [subscription, setSubscription] = useState<any | null>(null);
   const [dailyMessageCount, setDailyMessageCount] = useState(0);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -387,13 +389,15 @@ export default function AISandboxPage() {
       if (data.active && data.healthy && data.sandboxData) {
         setSandboxData(data.sandboxData);
         updateStatus('Sandbox active', true);
-      } else if (data.active && !data.healthy) {
-        // Sandbox exists but not responding
-        updateStatus('Sandbox not responding', false);
-        // Optionally try to create a new one
       } else {
+        // Sandbox doesn't exist or expired
+        const hadSandbox = !!sandboxData;
         setSandboxData(null);
         updateStatus('No sandbox', false);
+        if (hadSandbox) {
+          // User previously had a sandbox that is now gone
+          addToast('Your sandbox has expired. Click the "+" button to create a new one.', 'info', { title: '⏳ Sandbox Expired', duration: 6000 });
+        }
       }
     } catch (error) {
       console.error('Failed to check sandbox status:', error);
@@ -485,6 +489,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       updateStatus('Error', false);
       log(`Failed to create sandbox: ${error.message}`, 'error');
       addChatMessage(`Failed to create sandbox: ${error.message}`, 'system');
+      addToast(error.message || 'Failed to create sandbox', 'error', { title: '🔧 Sandbox Error' });
     } finally {
       setLoading(false);
     }
@@ -915,6 +920,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       }
     } catch (error: any) {
       log(`Failed to apply code: ${error.message}`, 'error');
+      addToast(error.message || 'Failed to apply code to sandbox', 'error', { title: '❌ Code Application Failed' });
     } finally {
       setLoading(false);
       // Clear isEdit flag after applying code
@@ -1587,6 +1593,17 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       });
 
       if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        const isRateLimit = response.status === 429 || errorBody.toLowerCase().includes('rate limit') || errorBody.toLowerCase().includes('quota');
+        if (isRateLimit) {
+          addToast('Your AI API quota has been reached. Please wait or upgrade your plan.', 'warning', { title: '⚠️ API Limit Reached', duration: 8000 });
+          throw new Error('API rate limit reached. Please try again later.');
+        }
+        const isAuthError = response.status === 401 || response.status === 403;
+        if (isAuthError) {
+          addToast('API key is invalid or expired. Please check your settings.', 'error', { title: '🔑 Authentication Error', duration: 8000 });
+          throw new Error('API authentication failed. Check your API key.');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -1810,7 +1827,17 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                     files: prev.files.length > 0 ? prev.files : parsedFiles
                   }));
                 } else if (data.type === 'error') {
-                  throw new Error(data.error);
+                  const errMsg = data.error || 'Unknown AI generation error';
+                  const isRateLimit = errMsg.toLowerCase().includes('rate limit') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('429');
+                  const isKeyError = errMsg.toLowerCase().includes('api key') || errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('authentication');
+                  if (isRateLimit) {
+                    addToast('Your AI API quota has been reached. Please wait a moment or upgrade your plan.', 'warning', { title: '⚠️ API Limit Reached', duration: 8000 });
+                  } else if (isKeyError) {
+                    addToast('API key is invalid or expired. Check your configuration.', 'error', { title: '🔑 API Key Error', duration: 8000 });
+                  } else {
+                    addToast(errMsg, 'error', { title: '❌ Generation Error' });
+                  }
+                  throw new Error(errMsg);
                 }
               } catch (e) {
                 console.error('Failed to parse SSE data:', e);
@@ -1890,6 +1917,10 @@ Tip: I automatically detect and install npm packages from your code imports (lik
     } catch (error: any) {
       setChatMessages(prev => prev.filter(msg => msg.content !== 'Thinking...'));
       addChatMessage(`Error: ${error.message}`, 'system');
+      // Show toast for network-level errors that didn't get caught above
+      if (!error.message.includes('rate limit') && !error.message.includes('API authentication')) {
+        addToast(error.message || 'Something went wrong during generation', 'error', { title: '❌ Generation Failed' });
+      }
       // Reset generation progress and switch back to preview on error
       setGenerationProgress({
         isGenerating: false,
@@ -2326,6 +2357,7 @@ Focus on the key sections and content, making it clean and modern while preservi
 
     } catch (error: any) {
       addChatMessage(`Failed to clone website: ${error.message}`, 'system');
+      addToast(error.message || 'Failed to clone website', 'error', { title: '🌐 Clone Failed' });
       setUrlStatus([]);
       setIsPreparingDesign(false);
       // Clear all states on error
@@ -2703,6 +2735,7 @@ Focus on the key sections and content, making it clean and modern.`;
         }, 1000); // Show completion briefly then switch
       } catch (error: any) {
         addChatMessage(`Failed to clone website: ${error.message}`, 'system');
+        addToast(error.message || 'Generation failed. Please try again.', 'error', { title: '❌ Generation Failed' });
         setUrlStatus([]);
         setIsPreparingDesign(false);
         // Also clear generation progress on error
@@ -2994,18 +3027,19 @@ Focus on the key sections and content, making it clean and modern.`;
         </div>
       )}
 
-      <div className="bg-card px-4 py-4 border-b border-border flex items-center justify-between">
+      {/* ── Header Bar ── glassmorphism + gradient accent */}
+      <div className="glass-panel-strong gradient-accent-top px-4 py-3 border-b border-border/50 flex items-center justify-between z-10">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-sm font-bold text-white">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-500 via-purple-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white shadow-md">
               Z
             </div>
-            <span className="text-lg font-bold text-foreground">ZenMod.ai</span>
+            <span className="text-lg font-bold text-foreground tracking-tight">ZenMod.ai</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          {/* Model Selector - Left side */}
+          {/* Model Selector */}
           <select
             value={aiModel}
             onChange={(e) => {
@@ -3018,7 +3052,7 @@ Focus on the key sections and content, making it clean and modern.`;
               }
               router.push(`/?${params.toString()}`);
             }}
-            className="px-3 py-1.5 text-sm bg-background border border-border rounded-[10px] text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+            className="px-3 py-1.5 text-sm bg-background/60 backdrop-blur-sm border border-border/60 rounded-[10px] text-foreground focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500/40 transition-all"
           >
             {appConfig.ai.availableModels.map(model => (
               <option key={model} value={model}>
@@ -3063,7 +3097,7 @@ Focus on the key sections and content, making it clean and modern.`;
               <Button variant="code" onClick={() => setShowSubscriptionModal(true)} size="sm">Upgrade</Button>
               <Button variant="code" onClick={() => setShowGithubModal(true)} size="sm">Import from GitHub</Button>
               <Button variant="code" onClick={() => setShowExportModal(true)} size="sm">Export to GitHub</Button>
-              {session.user?.user_metadata.avatar_url && <img src={session.user.user_metadata.avatar_url} alt="user profile" className="w-8 h-8 rounded-full border border-border shadow-sm" />}
+              {session.user?.user_metadata.avatar_url && <img src={session.user.user_metadata.avatar_url} alt="user profile" className="w-8 h-8 rounded-full border-2 border-border/30 shadow-md ring-2 ring-background" />}
               <Button variant="code" onClick={() => supabase.auth.signOut()} size="sm">Logout</Button>
             </>
           ) : (
@@ -3083,18 +3117,20 @@ Focus on the key sections and content, making it clean and modern.`;
               })} size="sm">Login with GitHub</Button>
             </>
           )}
-          <div className="inline-flex items-center gap-2 bg-zinc-900 dark:bg-zinc-800 text-white px-3 py-1.5 rounded-[10px] text-sm font-medium [box-shadow:inset_0px_-2px_0px_0px_rgba(0,0,0,0.2)]">
+          <div className="inline-flex items-center gap-2 bg-zinc-900/90 dark:bg-zinc-800/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-[10px] text-sm font-medium shadow-lg border border-white/5">
             <span id="status-text">{status.text}</span>
-            <div className={`w-2 h-2 rounded-full ${status.active ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-zinc-600'}`} />
+            <div className={`w-2 h-2 rounded-full transition-all ${status.active ? 'bg-green-400 shadow-[0_0_10px_rgba(34,197,94,0.5)] animate-status-breathe' : 'bg-zinc-600'}`} />
           </div>
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Center Panel - AI Chat (1/3 of remaining width) */}
-        <div className="flex-1 max-w-[400px] flex flex-col border-r border-border bg-background">
+        {/* ── Chat Panel ── with dot pattern + glassmorphism */}
+        <div className="flex-1 max-w-[400px] flex flex-col border-r border-border/50 bg-background relative overflow-hidden">
+          {/* Subtle dot pattern background for chat */}
+          <div className="absolute inset-0 bg-dot-pattern opacity-[0.03] dark:opacity-[0.05] pointer-events-none" />
           {conversationContext.scrapedWebsites.length > 0 && (
-            <div className="p-4 bg-card">
+            <div className="p-4 glass-panel-strong border-b border-border/40 relative z-10">
               <div className="flex flex-col gap-2">
                 {conversationContext.scrapedWebsites.map((site, idx) => {
                   // Extract favicon and site info from the scraped data
@@ -3129,7 +3165,7 @@ Focus on the key sections and content, making it clean and modern.`;
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-1 scrollbar-hide" ref={chatMessagesRef}>
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-1 scrollbar-hide relative z-10" ref={chatMessagesRef}>
             {chatMessages.map((msg, idx) => {
               // Check if this message is from a successful generation
               const isGenerationComplete = msg.content.includes('Successfully recreated') ||
@@ -3140,15 +3176,15 @@ Focus on the key sections and content, making it clean and modern.`;
               const completedFiles = msg.metadata?.appliedFiles || [];
 
               return (
-                <div key={idx} className="block">
+                <div key={idx} className={`block ${msg.type === 'user' ? 'animate-chat-right' : 'animate-chat-left'}`}>
                   <div className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'} mb-1`}>
                     <div className="block">
-                      <div className={`block rounded-[10px] px-4 py-2 ${msg.type === 'user' ? 'bg-zinc-900 dark:bg-zinc-800 text-white ml-auto max-w-[80%] shadow-sm' :
-                        msg.type === 'ai' ? 'bg-muted text-foreground mr-auto max-w-[80%] shadow-sm' :
-                          msg.type === 'system' ? 'bg-zinc-900 dark:bg-zinc-800 text-white text-sm opacity-90' :
-                            msg.type === 'command' ? 'bg-zinc-900 dark:bg-zinc-800 text-white font-mono text-sm' :
-                              msg.type === 'error' ? 'bg-red-950 text-red-200 text-sm border border-red-900 shadow-md' :
-                                'bg-zinc-900 dark:bg-zinc-800 text-white text-sm'
+                      <div className={`block rounded-[14px] px-4 py-2.5 transition-all duration-200 ${msg.type === 'user' ? 'bg-gradient-to-br from-zinc-800 to-zinc-900 dark:from-zinc-700 dark:to-zinc-800 text-white ml-auto max-w-[80%] shadow-md' :
+                        msg.type === 'ai' ? 'bg-muted/80 backdrop-blur-sm text-foreground mr-auto max-w-[80%] shadow-sm border border-border/30' :
+                          msg.type === 'system' ? 'bg-zinc-900/90 dark:bg-zinc-800/90 backdrop-blur-sm text-white text-sm border border-white/5' :
+                            msg.type === 'command' ? 'bg-zinc-900/95 dark:bg-zinc-800/95 text-white font-mono text-sm border border-white/5' :
+                              msg.type === 'error' ? 'bg-red-950/90 backdrop-blur-sm text-red-200 text-sm border border-red-500/30 shadow-lg shadow-red-950/20' :
+                                'bg-zinc-900/90 dark:bg-zinc-800/90 text-white text-sm'
                         }`}>
                         {msg.type === 'command' ? (
                           <div className="flex items-start gap-2">
@@ -3323,24 +3359,42 @@ Focus on the key sections and content, making it clean and modern.`;
             )}
           </div>
 
-          <div className="p-4 border-t border-border bg-card">
+          {/* ── Chat Input ── glassmorphism */}
+          <div className="p-4 border-t border-border/40 glass-panel-strong relative z-10">
+            {/* Daily limit indicator */}
+            {!subscription && dailyMessageCount >= 8 && (
+              <div className="mb-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-medium flex items-center gap-2">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                {dailyMessageCount >= 10 ? 'Daily limit reached. Upgrade to continue.' : `${10 - dailyMessageCount} messages remaining today`}
+              </div>
+            )}
             <div className="relative">
               <Textarea
-                className="min-h-[60px] pr-12 resize-y border border-border focus:ring-1 focus:ring-primary focus:outline-none bg-background shadow-sm"
-                placeholder=""
+                className="min-h-[60px] pr-12 resize-y border border-border/50 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 focus:outline-none bg-background/60 backdrop-blur-sm shadow-sm rounded-[14px] transition-all"
+                placeholder="Ask ZenMod.ai to build something..."
                 value={aiChatInput}
                 onChange={(e) => setAiChatInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
+                    if (!subscription && dailyMessageCount >= 10) {
+                      addToast('Daily message limit reached. Please upgrade your plan to continue.', 'warning', { title: '⚠️ Limit Reached', duration: 6000 });
+                      return;
+                    }
                     sendChatMessage();
                   }
                 }}
                 rows={3}
               />
               <button
-                onClick={sendChatMessage}
-                className="absolute right-2 bottom-2 p-2 bg-primary text-primary-foreground rounded-[10px] hover:opacity-90 [box-shadow:inset_0px_-2px_0px_0px_rgba(0,0,0,0.2)] hover:translate-y-[1px] hover:scale-[0.98] active:translate-y-[2px] active:scale-[0.97] transition-all duration-200"
+                onClick={() => {
+                  if (!subscription && dailyMessageCount >= 10) {
+                    addToast('Daily message limit reached. Please upgrade your plan to continue.', 'warning', { title: '⚠️ Limit Reached', duration: 6000 });
+                    return;
+                  }
+                  sendChatMessage();
+                }}
+                className="absolute right-2.5 bottom-2.5 p-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-[12px] hover:from-orange-600 hover:to-orange-700 shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30 hover:translate-y-[1px] hover:scale-[0.98] active:translate-y-[2px] active:scale-[0.97] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                 title="Send message (Enter)"
                 disabled={!subscription && dailyMessageCount >= 10}
               >
@@ -3352,16 +3406,16 @@ Focus on the key sections and content, making it clean and modern.`;
           </div>
         </div>
 
-        {/* Right Panel - Preview or Generation (2/3 of remaining width) */}
+        {/* ── Right Panel - Preview or Generation ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-4 py-2 bg-card border-b border-border flex justify-between items-center">
+          <div className="px-4 py-2 glass-panel-strong border-b border-border/40 flex justify-between items-center">
             <div className="flex items-center gap-4">
-              <div className="flex bg-[#101010] rounded-lg p-1">
+              <div className="flex bg-zinc-900/80 dark:bg-zinc-800/80 backdrop-blur-sm rounded-xl p-1 border border-white/5 shadow-inner">
                 <button
                   onClick={() => setActiveTab('generation')}
-                  className={`p-2 rounded-md transition-all ${activeTab === 'generation'
-                    ? 'bg-black text-white'
-                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                  className={`p-2 rounded-lg transition-all duration-200 ${activeTab === 'generation'
+                    ? 'bg-gradient-to-b from-zinc-700 to-zinc-800 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
                     }`}
                   title="Code"
                 >
@@ -3371,9 +3425,9 @@ Focus on the key sections and content, making it clean and modern.`;
                 </button>
                 <button
                   onClick={() => setActiveTab('preview')}
-                  className={`p-2 rounded-md transition-all ${activeTab === 'preview'
-                    ? 'bg-black text-white'
-                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                  className={`p-2 rounded-lg transition-all duration-200 ${activeTab === 'preview'
+                    ? 'bg-gradient-to-b from-zinc-700 to-zinc-800 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
                     }`}
                   title="Preview"
                 >
@@ -3385,24 +3439,24 @@ Focus on the key sections and content, making it clean and modern.`;
               </div>
             </div>
             <div className="flex gap-2 items-center">
-              {/* Live Code Generation Status - Moved to far right */}
+              {/* Live Code Generation Status */}
               {activeTab === 'generation' && (generationProgress.isGenerating || generationProgress.files.length > 0) && (
                 <div className="flex items-center gap-3">
                   {!generationProgress.isEdit && (
-                    <div className="text-gray-600 text-sm">
+                    <div className="text-muted-foreground text-sm">
                       {generationProgress.files.length} files generated
                     </div>
                   )}
-                  <div className={`inline-flex items-center justify-center whitespace-nowrap rounded-[10px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-[#101010] text-white hover:bg-[#101010] [box-shadow:inset_0px_-2px_0px_0px_#171310,_0px_1px_6px_0px_rgba(58,_33,_8,_58%)] hover:translate-y-[1px] hover:scale-[0.98] hover:[box-shadow:inset_0px_-1px_0px_0px_#171310,_0px_1px_3px_0px_rgba(58,_33,_8,_40%)] active:translate-y-[2px] active:scale-[0.97] active:[box-shadow:inset_0px_1px_1px_0px_#171310,_0px_1px_2px_0px_rgba(58,_33,_8,_30%)] disabled:shadow-none disabled:hover:translate-y-0 disabled:hover:scale-100 h-8 px-3 py-1 text-sm gap-2`}>
+                  <div className="inline-flex items-center gap-2 bg-zinc-900/90 dark:bg-zinc-800/90 backdrop-blur-sm text-white rounded-[10px] h-8 px-3 py-1 text-sm font-medium shadow-lg border border-white/5">
                     {generationProgress.isGenerating ? (
                       <>
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
-                        {generationProgress.isEdit ? 'Editing code' : 'Live code generation'}
+                        <div className="w-2 h-2 bg-green-400 rounded-full animate-status-breathe shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                        {generationProgress.isEdit ? 'Editing code' : 'Live generation'}
                       </>
                     ) : (
                       <>
-                        <div className="w-2 h-2 bg-gray-500 rounded-full" />
-                        COMPLETE
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full" />
+                        <span className="text-emerald-300">COMPLETE</span>
                       </>
                     )}
                   </div>
@@ -3440,16 +3494,22 @@ Focus on the key sections and content, making it clean and modern.`;
 
 
       {showSubscriptionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-          <div className="bg-background rounded-lg p-8 border border-border shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            className="glass-panel-strong rounded-2xl p-8 shadow-2xl border border-border/30 max-w-lg w-full mx-4"
+          >
             <SubscriptionPlans />
-            <Button onClick={() => setShowSubscriptionModal(false)} className="mt-4">Close</Button>
-          </div>
+            <Button onClick={() => setShowSubscriptionModal(false)} className="mt-4 w-full">Close</Button>
+          </motion.div>
         </div>
       )}
 
       {showGithubModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
           <ImportFromGithubModal
             onClose={() => setShowGithubModal(false)}
             onImport={async (repo) => {
@@ -3479,7 +3539,7 @@ Focus on the key sections and content, making it clean and modern.`;
       )}
 
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
           <ExportToGithubModal
             onClose={() => setShowExportModal(false)}
             onExport={async (repoName) => {
