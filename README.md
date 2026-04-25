@@ -29,7 +29,7 @@
 
 ## ✨ Video
 <p align="center">
-  <video src="assets/demo.mp4" width="100%" autoplay loop muted playsinline></video>
+  <img src="assets/demo.gif" width="100%" alt="ZenMod Demo" />
 </p>
 
 ---
