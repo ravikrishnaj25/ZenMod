@@ -16,9 +16,14 @@
 
 <!-- Full Workspace -->
 <p align="center">
-  <img src="assets/workspace.png" width="100%" alt="ZenMod Workspace"/>
+  <a href="https://youtu.be/8Pl2wTxHfmI">
+    <img src="assets/workspace.png" width="100%" alt="Watch Demo" />
+  </a>
 </p>
 
+<p align="center">
+  <a href="https://youtu.be/8Pl2wTxHfmI"><b>Click to Watch the ZenMod Demo</b></a>
+</p>
 <!-- Prompt Builder & Live Preview -->
 <p align="center">
   <img src="assets/CodeGenerator.png" width="49%" alt="Code Generator"/>
@@ -26,11 +31,6 @@
 </p>
 
 **ZenMod.ai** is a high-performance, AI-driven platform designed to accelerate web development. By combining the power of Large Language Models (LLMs) with secure, isolated execution environments, ZenMod allows developers and entrepreneurs to build, test, and deploy React applications through a simple conversational interface.
-
-## ✨ Video
-<p align="center">
-  <img src="assets/demo.gif" width="100%" alt="ZenMod Demo" />
-</p>
 
 ---
 
